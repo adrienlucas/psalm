@@ -2,8 +2,6 @@
 namespace Psalm\Internal\Analyzer\Statements\Expression\Call;
 
 use PhpParser;
-use PhpParser\BuilderFactory;
-use Psalm\Internal\Analyzer\Statements\ExpressionAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\CodeLocation;
 use Psalm\Context;
@@ -19,10 +17,8 @@ use Psalm\Type;
 use Psalm\Type\Atomic\TCallable;
 use function count;
 use function strtolower;
-use function strpos;
 use Psalm\Internal\Type\TemplateBound;
 use Psalm\Internal\Type\TemplateResult;
-use function explode;
 
 /**
  * @internal
@@ -199,39 +195,7 @@ class FunctionCallReturnTypeFetcher
             $template_result
         );
 
-        if ($function_storage->proxy_calls !== null) {
-            foreach ($function_storage->proxy_calls as $proxy_call) {
-                $fake_call_arguments = [];
-                foreach ($proxy_call['params'] as $i) {
-                    $fake_call_arguments[] = $stmt->args[$i];
-                }
-
-                $fake_call_factory = new BuilderFactory();
-
-                if (strpos($proxy_call['fqn'], '::') !== false) {
-                    list($fqcn, $method) = explode('::', $proxy_call['fqn']);
-                    $fake_call = $fake_call_factory->staticCall($fqcn, $method, $fake_call_arguments);
-                } else {
-                    $fake_call = $fake_call_factory->funcCall($proxy_call['fqn'], $fake_call_arguments);
-                }
-
-                $old_node_data = $statements_analyzer->node_data;
-                $statements_analyzer->node_data = clone $statements_analyzer->node_data;
-
-                ExpressionAnalyzer::analyze($statements_analyzer, $fake_call, $context);
-
-                $statements_analyzer->node_data = $old_node_data;
-
-                if ($return_node && $proxy_call['return']) {
-                    $fake_call_type = $statements_analyzer->node_data->getType($fake_call);
-                    if (null !== $fake_call_type) {
-                        foreach ($fake_call_type->parent_nodes as $fake_call_node) {
-                            $statements_analyzer->data_flow_graph->addPath($fake_call_node, $return_node, 'return');
-                        }
-                    }
-                }
-            }
-        }
+        FunctionCallAnalyzer::proxyCalls($stmt, $statements_analyzer, $function_storage, $context, $return_node);
 
         return $stmt_type;
     }

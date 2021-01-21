@@ -2,10 +2,13 @@
 namespace Psalm\Internal\Analyzer\Statements\Expression;
 
 use PhpParser;
+use PhpParser\BuilderFactory;
 use Psalm\Internal\Algebra\FormulaGenerator;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\Analyzer\FunctionLikeAnalyzer;
+use Psalm\Internal\Analyzer\Statements\ExpressionAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
+use Psalm\Internal\DataFlow\DataFlowNode;
 use Psalm\Internal\Type\Comparator\UnionTypeComparator;
 use Psalm\Internal\Type\TemplateBound;
 use Psalm\Internal\Type\TemplateResult;
@@ -18,6 +21,7 @@ use Psalm\Issue\ArgumentTypeCoercion;
 use Psalm\Issue\UndefinedFunction;
 use Psalm\IssueBuffer;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\FunctionLikeStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
 use function strtolower;
@@ -31,6 +35,7 @@ use function is_int;
 use function substr;
 use function array_merge;
 use function array_map;
+use function explode;
 
 /**
  * @internal
@@ -988,6 +993,52 @@ class CallAnalyzer
                         $template_result->upper_bounds[$template_name][$defining_id] = new TemplateBound(
                             clone $lower_bound->type
                         );
+                    }
+                }
+            }
+        }
+    }
+
+    public static function proxyCalls(
+        PhpParser\Node\Expr $stmt,
+        StatementsAnalyzer $statements_analyzer,
+        FunctionLikeStorage $function_storage,
+        Context $context,
+        ?DataFlowNode $return_node = null
+    ): void {
+        if (null === $function_storage->proxy_calls
+            || (
+                !$stmt instanceof PhpParser\Node\Expr\FuncCall
+                && !$stmt instanceof PhpParser\Node\Expr\MethodCall
+                && !$stmt instanceof PhpParser\Node\Expr\StaticCall
+            )
+        ) {
+            return;
+        }
+
+        foreach ($function_storage->proxy_calls as $proxy_call) {
+            $fake_call_arguments = [];
+            foreach ($proxy_call['params'] as $i) {
+                $fake_call_arguments[] = $stmt->args[$i];
+            }
+
+            $fake_call_factory = new BuilderFactory();
+            if (strpos($proxy_call['fqn'], '::') !== false) {
+                list($fqcn, $method) = explode('::', $proxy_call['fqn']);
+                $fake_call = $fake_call_factory->staticCall($fqcn, $method, $fake_call_arguments);
+            } else {
+                $fake_call = $fake_call_factory->funcCall($proxy_call['fqn'], $fake_call_arguments);
+            }
+            ExpressionAnalyzer::analyze($statements_analyzer, $fake_call, $context);
+
+            if (null !== $statements_analyzer->data_flow_graph
+                && null !== $return_node
+                && $proxy_call['return']
+            ) {
+                $fake_call_type = $statements_analyzer->node_data->getType($fake_call);
+                if (null !== $fake_call_type) {
+                    foreach ($fake_call_type->parent_nodes as $fake_call_node) {
+                        $statements_analyzer->data_flow_graph->addPath($fake_call_node, $return_node, 'return');
                     }
                 }
             }

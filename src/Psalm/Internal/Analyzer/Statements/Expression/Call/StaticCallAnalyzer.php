@@ -243,11 +243,11 @@ class StaticCallAnalyzer extends CallAnalyzer
         Type\Union $return_type_candidate,
         ?\Psalm\Storage\MethodStorage $method_storage,
         ?\Psalm\Internal\Type\TemplateResult $template_result
-    ) : void {
+    ) : ?DataFlowNode {
         if (!$statements_analyzer->data_flow_graph instanceof TaintFlowGraph
             || \in_array('TaintedInput', $statements_analyzer->getSuppressedIssues())
         ) {
-            return;
+            return null;
         }
 
         $code_location = new CodeLocation($statements_analyzer->getSource(), $stmt);
@@ -334,5 +334,7 @@ class StaticCallAnalyzer extends CallAnalyzer
 
             $statements_analyzer->data_flow_graph->addSource($method_node);
         }
+
+        return $method_source;
     }
 }

@@ -2,6 +2,7 @@
 namespace Psalm\Internal\Analyzer\Statements\Expression\Call\Method;
 
 use PhpParser;
+use Psalm\Internal\Analyzer\Statements\Expression\Call\MethodCallAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\Codebase\InternalCallMapHandler;
 use Psalm\Internal\Analyzer\Statements\Expression\ExpressionIdentifier;
@@ -189,7 +190,7 @@ class MethodCallReturnTypeFetcher
             $return_type_candidate = $method_name === '__tostring' ? Type::getString() : Type::getMixed();
         }
 
-        self::taintMethodCallResult(
+        $return_node = self::taintMethodCallResult(
             $statements_analyzer,
             $return_type_candidate,
             $stmt->name,
@@ -198,6 +199,14 @@ class MethodCallReturnTypeFetcher
             $declaring_method_id,
             $cased_method_id,
             $context
+        );
+
+        MethodCallAnalyzer::proxyCalls(
+            $stmt,
+            $statements_analyzer,
+            $codebase->methods->getStorage($call_map_id),
+            $context,
+            $return_node
         );
 
         return $return_type_candidate;
@@ -212,7 +221,7 @@ class MethodCallReturnTypeFetcher
         ?MethodIdentifier $declaring_method_id,
         string $cased_method_id,
         Context $context
-    ) : void {
+    ) : ?DataFlowNode {
         $codebase = $statements_analyzer->getCodebase();
 
         if ($statements_analyzer->data_flow_graph instanceof TaintFlowGraph
@@ -428,7 +437,11 @@ class MethodCallReturnTypeFetcher
 
                 $statements_analyzer->data_flow_graph->addSource($method_node);
             }
+
+            return $method_call_node ?? null;
         }
+
+        return null;
     }
 
     private static function replaceTemplateTypes(

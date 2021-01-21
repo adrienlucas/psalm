@@ -1776,6 +1776,49 @@ class TaintTest extends TestCase
                     echo some_stub($r);',
                 'error_message' => 'TaintedHtml',
             ],
+            'taintFlowMethodToMethodProxyAndReturn' => [
+                '<?php
+
+                class dummy {
+                    public function taintable(string $in): string {
+                        return $in;
+                    }
+                }
+
+                class some_stub {
+                    /**
+                    * @psalm-flow proxy dummy::taintable($r) -> return
+                    */
+                    public function some_method(string $r): string {}
+                }
+
+                $r = $_GET["untrusted"];
+
+                $stub = new some_stub();
+                echo $stub->some_method($r);',
+                'error_message' => 'TaintedHtml',
+            ],
+            'taintFlowStaticMethodToMethodProxyAndReturn' => [
+                '<?php
+
+                class dummy {
+                    public function taintable(string $in): string {
+                        return $in;
+                    }
+                }
+
+                class some_stub {
+                    /**
+                     * @psalm-flow proxy dummy::taintable($r) -> return
+                     */
+                    public static function some_method(string $r): string {}
+                }
+
+                $r = $_GET["untrusted"];
+
+                echo some_stub::some_method($r);',
+                'error_message' => 'TaintedHtml',
+            ],
             'taintPopen' => [
                 '<?php
                     $cb = popen($_POST[\'x\'], \'r\');',

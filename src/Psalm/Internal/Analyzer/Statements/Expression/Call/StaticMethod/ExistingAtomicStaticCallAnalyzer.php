@@ -499,7 +499,7 @@ class ExistingAtomicStaticCallAnalyzer
 
         $return_type_candidate = $return_type_candidate ?: Type::getMixed();
 
-        \Psalm\Internal\Analyzer\Statements\Expression\Call\StaticCallAnalyzer::taintReturnType(
+        $return_node = \Psalm\Internal\Analyzer\Statements\Expression\Call\StaticCallAnalyzer::taintReturnType(
             $statements_analyzer,
             $stmt,
             $method_id,
@@ -508,6 +508,16 @@ class ExistingAtomicStaticCallAnalyzer
             $method_storage,
             $template_result
         );
+
+        if (null !== $method_storage) {
+            \Psalm\Internal\Analyzer\Statements\Expression\Call\StaticCallAnalyzer::proxyCalls(
+                $stmt,
+                $statements_analyzer,
+                $method_storage,
+                $context,
+                $return_node
+            );
+        }
 
         if ($stmt_type = $statements_analyzer->node_data->getType($stmt)) {
             $statements_analyzer->node_data->setType(
